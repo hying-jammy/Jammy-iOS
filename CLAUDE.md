@@ -24,8 +24,12 @@
 
 ### 백엔드 상태 (중요)
 
-**API는 아직 없다. 추후 연결 예정이다.** 따라서 지금은 모든 데이터를 Mock으로 제공하되,
-나중에 실제 API로 **ViewModel/View 수정 없이 교체**할 수 있게 구조를 잡는다. (아래 "데이터 계층" 참고)
+**API 서버가 연결되어 있다.** 명세는 Notion `째미 Jammy / Jammy - 문서 / API 명세서` 이다. (11개 엔드포인트)
+
+- 서버 주소는 `Jammy-iOS/Info.plist` 의 `JammyAPIBaseURL` 에 있다. **값을 비우면 Mock 데이터로 동작한다.**
+  (`AppContainer.make()` 가 선택한다. DEBUG 빌드에서는 실행 환경변수 `JAMMY_API_BASE_URL` 로 덮어쓸 수 있다.)
+- 현재 서버는 `http://` 평문이라 `Info.plist` 에 해당 호스트만 ATS 예외를 두었다. **HTTPS 로 바뀌면 예외를 지운다.**
+- 화면(ViewModel/View)은 Repository 프로토콜에만 의존하므로 Mock ↔ Remote 교체에 영향받지 않는다. (아래 "데이터 계층" 참고)
 
 ## 폴더 구조
 
@@ -39,8 +43,8 @@ Jammy-iOS/Jammy-iOS/            # Xcode 프로젝트 루트 소스 폴더 (폴�
 │   ├── DesignSystem/
 │   │   ├── Tokens/               # (추후) Font, Spacing, Radius, Shadow. 색은 Assets.xcassets 사용
 │   │   └── Components/           # JammyButton, JammyChip, JammyTextField ...
-│   ├── Networking/               # (API 연결 시 추가) APIClient, Endpoint, APIError
-│   ├── Storage/                  # Keychain, UserDefaults 래퍼
+│   ├── Networking/               # APIClient, APIRequest(JSON/multipart), APIConfig(서버 주소)
+│   ├── Storage/                  # SessionStore (userId/닉네임 저장)
 │   ├── Extensions/
 │   └── Utilities/
 ├── Domain/
@@ -48,8 +52,7 @@ Jammy-iOS/Jammy-iOS/            # Xcode 프로젝트 루트 소스 폴더 (폴�
 │   └── Repositories/             # Repository 프로토콜 (인터페이스만)
 ├── Data/
 │   ├── Mock/                     # Mock 구현 + 샘플 데이터
-│   ├── Remote/                   # (추후) DTO, API 구현체
-│   └── Mappers/                  # DTO ↔ Domain 변환
+│   └── Remote/                   # DTO, Remote*Repository, DTO → Domain 변환(RemoteMappers)
 ├── Features/
 │   ├── Onboarding/               # Welcome(초기 화면)
 │   ├── Auth/                     # Login, SignUp
@@ -144,46 +147,54 @@ struct RemoteRoomRepository: RoomRepository { ... } // API 연결 시 구현
 - Mock 데이터는 메모리에 유지해서 "방 만들기 → 홈 목록에 나타남" 같은 흐름이 앱 안에서 이어지게 한다 (Mock 저장소는 `@MainActor` 클래스. 프로젝트가 기본 MainActor 격리라 Sendable 문제를 피하기 위함).
 - 서버 응답 모양을 아직 모르므로 **Domain Model 을 먼저 안정적으로 설계**하고, API 연결 시 `DTO → Domain` Mapper 로 흡수한다. Domain Model 에 `Codable` 을 억지로 붙이지 않는다.
 - 에러는 `AppError`(Domain 수준)로 통일한다. 네트워크/서버 에러는 Data 계층에서 `AppError` 로 변환한다.
-- 인증 토큰은 Keychain 에 저장한다 (UserDefaults 금지). 로그인/회원가입은 `AuthRepository` 로 추상화.
+- 서버는 **토큰을 발급하지 않는다.** 로그인 응답의 `userId`/닉네임을 `SessionStore`(UserDefaults)에 저장하고,
+  이후 요청의 경로·본문에 `userId` 를 담아 보낸다. (토큰 방식으로 바뀌면 Keychain 으로 옮긴다)
 
-### API 연결 시 체크리스트 (추후)
+### 서버 연동 메모 (실제 서버를 확인한 결과)
 
-1. `Core/Networking` 에 `APIClient`(URLSession + async/await), `Endpoint`, `APIError` 추가
-2. `Data/Remote` 에 DTO 와 `Remote*Repository` 구현
-3. `Data/Mappers` 에서 DTO ↔ Domain 변환
-4. `AppContainer` 에서 Mock → Remote 교체 (환경별 base URL 은 `.xcconfig` 로 분리)
-5. 토큰 갱신/401 처리, 이미지 업로드(멀티파트 또는 presigned URL) 방식은 백엔드 확정 후 결정
+명세와 실제 서버 응답이 다른 부분이 있다. 코드는 **실제 서버 기준**으로 맞춰 두었고, 백엔드가 고치면 해당 부분만 정리한다.
+
+| 항목 | 명세 | 실제 서버 | 앱 처리 |
+|---|---|---|---|
+| 공개 피드 `GET /rooms/{id}/diaries` | 공개 일기만 | **타임캡슐 일기(비밀 일기)도 내용과 함께 내려옴** | 앱이 `.capsule` 항목의 내용을 버리고 가림 표시(`RoomMainViewModel`) |
+| 타임캡슐 일기 `GET .../time-capsule/diaries` 응답 | 배열 | `{memberCount, diaryCount, diaries:[…]}` 객체 | 둘 다 디코딩 (`CapsuleDiariesDTO`) |
+| 공개 전 위 API 호출 | 403 | **409** | 403/409 → `AppError.capsuleNotOpened` |
+| 타임캡슐 정보 필드 | `timeCapsuleTitle`, `hasTimeCapsuleDiary` | `timeCapsuleName`, `hasWritten` | 둘 다 디코딩 (`CapsuleInfoDTO`) |
+| 로그인 비밀번호 오류 | 401 | 400 + 메시지 | 서버 메시지를 그대로 표시 |
+| 로그인 없는 이메일 | - | 404 | `invalidCredentials` |
+| 날짜+시간(`LocalDateTime`) | 시간대 미명시 | **UTC 기준** (일기 작성 시각, 공개 일시) | UTC 로 보내고 읽음 (`ServerDate`) |
+
+- 방 상세/목록 응답에는 **최대 인원(`memberLimit`)이 없다.** (초대 코드 확인·방 생성 응답에만 있음) → `TripRoom.memberLimit` 은 옵셔널.
+- 참여자·작성자는 **닉네임만** 내려온다 (id 없음). 닉네임을 식별자로 쓴다. 닉네임 중복 여부는 서버 정책을 확인해야 한다.
+- 일기 사진은 **최대 1장**, 글은 최대 500자. 글 업로드는 `multipart/form-data` (`userId`, `content`, `type`, `image`).
+- 모든 요청에 인증이 없다 (`userId` 만 전달). 서버가 권한을 제대로 검증하는지는 백엔드와 확인이 필요하다.
+- 서버의 초대 코드 형식이 명세 예시(`JAM-XXXX`)와 다르다. (예: `TST-0001`, `RYF-RES2`) 형식을 가정하지 않는다.
 
 ## 도메인 모델 (초안)
 
 기능 명세서 기준. 필드는 API 확정 시 조정될 수 있다.
 
 ```swift
-struct User { id, nickname, email }
+struct User { id: Int, nickname }          // 서버가 userId 와 닉네임만 준다
+struct Member { nickname }                 // 닉네임이 id
 
 struct TripRoom {
-    id, title
+    id: Int, title
     startDate, endDate
-    inviteCode            // 예: "JAM-4F7K"
-    ownerID
-    members: [Member]
-    capsule: TimeCapsule? // MVP: 방당 1개
+    inviteCode
+    members: [Member]                      // 목록 API 에서는 비어 있을 수 있음
+    memberCount, memberLimit: Int?         // 최대 인원은 일부 응답에만 있음
+    capsule: TimeCapsule?                  // MVP: 방당 1개
 }
 
 struct DiaryEntry {
-    id, roomID, authorID
-    text
-    photoURLs / photoData
-    visibility: Visibility    // .friends(공개 일기) | .capsule(비밀 일기)
+    id: Int, authorNickname
+    text, photoURL: URL?, photoData: Data? // photoData 는 Mock 전용
+    visibility: DiaryVisibility            // .friends(PUBLIC) | .capsule(TIME_CAPSULE)
     createdAt
 }
 
-struct TimeCapsule {
-    id, roomID, title
-    openAt: Date
-    status: Status            // .locked | .opened
-    participants: [Member]
-}
+struct TimeCapsule { title, openAt }       // 공개 여부는 시각으로 계산, 실제 기준은 서버(CapsuleInfo.isOpened)
 ```
 
 ### 핵심 비즈니스 규칙 (MVP)
@@ -348,7 +359,8 @@ Figma `Jammy Components` 와 1:1 대응하는 SwiftUI 컴포넌트를 만들어 
 
 ## 아직 정해지지 않은 것 (TBD)
 
-- 백엔드 API 스펙, 인증 방식(이메일 / 소셜 로그인 여부), 이미지 업로드 방식
+- 서버 HTTPS 전환, 소셜 로그인 여부, 인증/권한 검증 방식(현재는 userId 만 전달)
+- 서버 시간대(현재 UTC 로 가정) 확정, 닉네임 중복 정책
 - 로컬 캐시/영속화 (SwiftData 사용 여부)
 - 푸시 알림 (타임캡슐 공개 알림은 2순위 기능)
 - 다크 모드 디자인
