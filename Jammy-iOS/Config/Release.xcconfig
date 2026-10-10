@@ -1,0 +1,16 @@
+// Release 빌드 설정 — API 서버 주소
+//
+// TODO: 운영 서버가 정해지면 HTTPS 주소로 바꾸고, Info.plist 의 ATS 예외(JAMMY_API_HOST)를 제거한다.
+// xcconfig 에서 "//" 는 주석이라, URL 의 "//" 는 $() 로 끊어서 쓴다. (https:/$()/host)
+
+JAMMY_API_HOST = 43.200.175.140
+JAMMY_API_BASE_URL = http:/$()/$(JAMMY_API_HOST)
+
+// Info.plist 전처리: http:// 서버일 때만 해당 호스트에 대한 ATS 예외를 Info.plist 에 넣는다.
+// https 서버로 바꾸면 아래 JAMMY_ATS_EXCEPTION_DEFINE 을 빈 값으로 두면 예외가 사라진다.
+INFOPLIST_PREPROCESS = YES
+INFOPLIST_OTHER_PREPROCESSOR_FLAGS = -traditional
+JAMMY_ATS_EXCEPTION_DEFINE = JAMMY_ATS_EXCEPTION_HOST=$(JAMMY_API_HOST)
+INFOPLIST_PREPROCESSOR_DEFINITIONS = $(JAMMY_ATS_EXCEPTION_DEFINE)
+
+#include? "Secrets.xcconfig"

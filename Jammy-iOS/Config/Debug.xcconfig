@@ -1,0 +1,16 @@
+// Debug 빌드 설정 — API 서버 주소
+//
+// xcconfig 에서 "//" 는 주석이라, URL 의 "//" 는 $() 로 끊어서 쓴다. (http:/$()/host)
+// 개인 PC 에서만 다른 서버를 쓰고 싶으면 Config/Secrets.xcconfig 를 만들어 값을 덮어쓴다. (Git 에 올라가지 않음)
+
+JAMMY_API_HOST = 43.200.175.140
+JAMMY_API_BASE_URL = http:/$()/$(JAMMY_API_HOST)
+
+// Info.plist 전처리: http:// 서버일 때만 해당 호스트에 대한 ATS 예외를 Info.plist 에 넣는다.
+// https 서버로 바꾸면 아래 JAMMY_ATS_EXCEPTION_DEFINE 을 빈 값으로 두면 예외가 사라진다.
+INFOPLIST_PREPROCESS = YES
+INFOPLIST_OTHER_PREPROCESSOR_FLAGS = -traditional
+JAMMY_ATS_EXCEPTION_DEFINE = JAMMY_ATS_EXCEPTION_HOST=$(JAMMY_API_HOST)
+INFOPLIST_PREPROCESSOR_DEFINITIONS = $(JAMMY_ATS_EXCEPTION_DEFINE)
+
+#include? "Secrets.xcconfig"

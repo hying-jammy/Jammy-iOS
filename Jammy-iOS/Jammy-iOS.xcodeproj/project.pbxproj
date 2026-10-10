@@ -8,6 +8,8 @@
 
 /* Begin PBXFileReference section */
 		51CEFB56306C1062001E1BD5 /* Jammy-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Jammy-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		51CEFB70306C1063001E1BD5 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		51CEFB71306C1063001E1BD5 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +35,7 @@
 			isa = PBXGroup;
 			children = (
 				51CEFB58306C1062001E1BD5 /* Jammy-iOS */,
+				51CEFB72306C1063001E1BD5 /* Config */,
 				51CEFB57306C1062001E1BD5 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +46,15 @@
 				51CEFB56306C1062001E1BD5 /* Jammy-iOS.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		51CEFB72306C1063001E1BD5 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				51CEFB70306C1063001E1BD5 /* Debug.xcconfig */,
+				51CEFB71306C1063001E1BD5 /* Release.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -127,6 +139,7 @@
 /* Begin XCBuildConfiguration section */
 		51CEFB5F306C1063001E1BD5 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 51CEFB70306C1063001E1BD5 /* Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -191,6 +204,7 @@
 		};
 		51CEFB60306C1063001E1BD5 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 51CEFB71306C1063001E1BD5 /* Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;

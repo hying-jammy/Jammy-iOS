@@ -3,12 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>JammyAPIBaseURL</key>
-	<string>http://43.200.175.140</string>
+	<string>$(JAMMY_API_BASE_URL)</string>
+#ifdef JAMMY_ATS_EXCEPTION_HOST
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>
 		<dict>
-			<key>43.200.175.140</key>
+			<key>JAMMY_ATS_EXCEPTION_HOST</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
@@ -17,6 +18,7 @@
 			</dict>
 		</dict>
 	</dict>
+#endif
 	<key>UIAppFonts</key>
 	<array>
 		<string>Pretendard-Black.ttf</string>

@@ -26,9 +26,14 @@
 
 **API 서버가 연결되어 있다.** 명세는 Notion `째미 Jammy / Jammy - 문서 / API 명세서` 이다. (11개 엔드포인트)
 
-- 서버 주소는 `Jammy-iOS/Info.plist` 의 `JammyAPIBaseURL` 에 있다. **값을 비우면 Mock 데이터로 동작한다.**
-  (`AppContainer.make()` 가 선택한다. DEBUG 빌드에서는 실행 환경변수 `JAMMY_API_BASE_URL` 로 덮어쓸 수 있다.)
-- 현재 서버는 `http://` 평문이라 `Info.plist` 에 해당 호스트만 ATS 예외를 두었다. **HTTPS 로 바뀌면 예외를 지운다.**
+- 서버 주소는 **`Jammy-iOS/Config/Debug.xcconfig`, `Release.xcconfig`** 의 `JAMMY_API_HOST` / `JAMMY_API_BASE_URL` 에서 정한다.
+  `Info.plist` 의 `JammyAPIBaseURL` 이 `$(JAMMY_API_BASE_URL)` 로 이 값을 받고, 앱은 `APIConfig` 로 읽는다.
+  **값을 비우면 Mock 데이터로 동작한다.** (`AppContainer.make()` 가 선택. DEBUG 빌드에서는 실행 환경변수 `JAMMY_API_BASE_URL` 로도 덮어쓸 수 있다)
+  - xcconfig 에서 `//` 는 주석이라 URL 은 `http:/$()/host` 처럼 `$()` 로 끊어서 쓴다.
+  - 개인 PC 에서만 다른 서버를 쓰려면 `Config/Secrets.xcconfig` 를 만든다. (`Secrets.example.xcconfig` 참고, Git 에 올라가지 않음)
+  - xcconfig 는 소스 폴더 밖(`Jammy-iOS/Config`)에 둔다. 소스 폴더 안에 두면 앱 번들에 복사된다.
+- 현재 서버는 `http://` 평문이라, `Info.plist` 를 전처리(`INFOPLIST_PREPROCESS`)해서 **그 호스트만** ATS 예외로 넣는다.
+  **HTTPS 서버로 바꾸면** xcconfig 의 `JAMMY_ATS_EXCEPTION_DEFINE` 을 빈 값으로 두면 예외가 사라진다. (Release 는 운영 서버가 정해지면 바꿔야 한다)
 - 화면(ViewModel/View)은 Repository 프로토콜에만 의존하므로 Mock ↔ Remote 교체에 영향받지 않는다. (아래 "데이터 계층" 참고)
 
 ## 폴더 구조
