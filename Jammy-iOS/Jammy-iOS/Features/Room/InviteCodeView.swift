@@ -10,29 +10,6 @@ struct InviteCodeView: View {
     }
 
     var body: some View {
-        Group {
-            switch viewModel.state {
-            case .loading:
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .failed(let error):
-                VStack(spacing: 12) {
-                    Text(error.errorDescription ?? "불러오지 못했어요.")
-                        .font(.pretendard(.medium, size: 14))
-                        .foregroundStyle(Color(.jammyTextSecondary))
-                    JammyButton(title: "다시 시도", kind: .soft) { Task { await viewModel.load() } }
-                        .frame(width: 160)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            case .loaded(let room):
-                loaded(room)
-            }
-        }
-        .task { await viewModel.load() }
-        .jammyScreenStyle()
-        .navigationBarBackButtonHidden()
-    }
-
-    private func loaded(_ room: TripRoom) -> some View {
         ScrollView {
             VStack(spacing: 18) {
                 VStack(spacing: 10) {
@@ -50,13 +27,13 @@ struct InviteCodeView: View {
                 }
                 .padding(.top, 16)
 
-                codeJar(room)
+                codeJar
 
                 HStack(spacing: 12) {
                     JammyButton(title: viewModel.didCopy ? "복사했어요" : "코드 복사", kind: .soft, systemImage: viewModel.didCopy ? "checkmark" : "doc.on.doc") {
-                        Task { await viewModel.copyCode(room) }
+                        Task { await viewModel.copyCode() }
                     }
-                    ShareLink(item: viewModel.shareText(for: room)) {
+                    ShareLink(item: viewModel.shareText) {
                         HStack(spacing: 8) {
                             Image(systemName: "link")
                                 .font(.system(size: 16, weight: .semibold))
@@ -70,26 +47,28 @@ struct InviteCodeView: View {
                     }
                 }
 
-                joinedCard(room)
+                joinedCard
             }
             .padding(.horizontal, 20)
         }
         .safeAreaInset(edge: .bottom) {
-            JammyButton(title: "방으로 들어가기") { router.enterRoom(room.id) }
+            JammyButton(title: "방으로 들어가기") { router.enterRoom(viewModel.room.id) }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
                 .background(Color(.jammyBackground))
         }
+        .jammyScreenStyle()
+        .navigationBarBackButtonHidden()
     }
 
-    private func codeJar(_ room: TripRoom) -> some View {
+    private var codeJar: some View {
         VStack(spacing: 12) {
             JamJarView(width: 220) {
                 VStack(spacing: 4) {
                     Text("초대 코드")
                         .font(.pretendard(.medium, size: 12, relativeTo: .caption))
                         .foregroundStyle(Color(.jammyTextTertiary))
-                    Text(room.inviteCode)
+                    Text(viewModel.room.inviteCode)
                         .font(.pretendard(.extrabold, size: 26, relativeTo: .title))
                         .foregroundStyle(Color(.jammyPrimary))
                         .minimumScaleFactor(0.7)
@@ -103,32 +82,32 @@ struct InviteCodeView: View {
                         .strokeBorder(Color(.jammyBorder), lineWidth: 1)
                 }
             }
-            Text(viewModel.metaText(for: room))
+            Text(viewModel.metaText)
                 .font(.pretendard(.regular, size: 13, relativeTo: .footnote))
                 .foregroundStyle(Color(.jammyTextSecondary))
-            if let capsuleText = viewModel.capsuleText(for: room) {
+            if let capsuleText = viewModel.capsuleText {
                 JammyChip(title: capsuleText, kind: .yellow, systemImage: "lock.fill")
             }
         }
         .frame(maxWidth: .infinity)
     }
 
-    private func joinedCard(_ room: TripRoom) -> some View {
+    private var joinedCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("참여한 친구")
                     .font(.pretendard(.bold, size: 15, relativeTo: .headline))
                     .foregroundStyle(Color(.jammyTextPrimary))
                 Spacer()
-                Text("\(room.members.count) / \(room.maxMembers)")
+                Text(viewModel.memberCountText)
                     .font(.pretendard(.semibold, size: 14, relativeTo: .subheadline))
                     .foregroundStyle(Color(.jammyPrimary))
             }
             HStack(spacing: 12) {
-                ForEach(room.members) { member in
+                ForEach(viewModel.room.members) { member in
                     JammyAvatar(member: member, size: .medium)
                 }
-                ForEach(0..<max(0, room.maxMembers - room.members.count), id: \.self) { _ in
+                ForEach(0..<viewModel.emptySlotCount, id: \.self) { _ in
                     Image(systemName: "plus")
                         .font(.system(size: 14))
                         .foregroundStyle(Color(.jammyTextTertiary))
@@ -151,9 +130,14 @@ struct InviteCodeView: View {
 }
 
 #Preview {
-    let container = AppContainer.mock()
+    let room = TripRoom(
+        id: 1, title: "부산 여행",
+        startDate: .now, endDate: .now.addingTimeInterval(172_800),
+        inviteCode: "JAM-4F7K", members: [Member(nickname: "나연")], memberCount: 1, memberLimit: 3,
+        capsule: TimeCapsule(title: "부산 여행 마지막 밤", openAt: .now.addingTimeInterval(200_000))
+    )
     NavigationStack {
-        InviteCodeView(viewModel: container.makeInviteCodeViewModel(roomID: UUID()))
+        InviteCodeView(viewModel: InviteCodeViewModel(room: room))
     }
     .environment(AppRouter())
 }

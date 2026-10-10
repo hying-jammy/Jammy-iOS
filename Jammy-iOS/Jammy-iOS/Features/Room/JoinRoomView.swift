@@ -91,7 +91,7 @@ struct JoinRoomView: View {
                 Text(viewModel.previewMeta(for: room))
                     .font(.pretendard(.regular, size: 13, relativeTo: .footnote))
                     .foregroundStyle(Color(.jammyTextSecondary))
-                Label("\(room.members.count) / \(room.maxMembers)명 참여 중", systemImage: "person.2")
+                Label(viewModel.memberCountText(for: room), systemImage: "person.2")
                     .font(.pretendard(.medium, size: 12, relativeTo: .caption))
                     .foregroundStyle(Color(.jammyTextSecondary))
             }

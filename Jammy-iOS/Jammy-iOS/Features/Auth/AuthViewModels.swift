@@ -85,7 +85,9 @@ final class SignUpViewModel {
         errorMessage = nil
         defer { isSubmitting = false }
         do {
-            _ = try await authRepository.signUp(nickname: trimmedNickname, email: email, password: password)
+            try await authRepository.signUp(nickname: trimmedNickname, email: email, password: password)
+            // 가입 응답에는 userId 가 없어서 같은 정보로 로그인해 세션을 만든다.
+            _ = try await authRepository.login(email: email, password: password)
             return true
         } catch {
             errorMessage = AppError(error).errorDescription

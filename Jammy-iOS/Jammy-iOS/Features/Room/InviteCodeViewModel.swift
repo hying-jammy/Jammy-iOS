@@ -5,48 +5,43 @@ import UIKit
 @MainActor
 @Observable
 final class InviteCodeViewModel {
-    enum State {
-        case loading
-        case loaded(TripRoom)
-        case failed(AppError)
-    }
-
-    let roomID: UUID
-    private(set) var state: State = .loading
+    let room: TripRoom
     private(set) var didCopy = false
 
-    private let roomRepository: RoomRepository
-
-    init(roomID: UUID, roomRepository: RoomRepository) {
-        self.roomID = roomID
-        self.roomRepository = roomRepository
+    init(room: TripRoom) {
+        self.room = room
     }
 
-    func load() async {
-        do {
-            state = .loaded(try await roomRepository.fetchRoom(id: roomID))
-        } catch {
-            state = .failed(AppError(error))
-        }
-    }
-
-    func copyCode(_ room: TripRoom) async {
+    func copyCode() async {
         UIPasteboard.general.string = room.inviteCode
         didCopy = true
         try? await Task.sleep(for: .seconds(2))
         didCopy = false
     }
 
-    func shareText(for room: TripRoom) -> String {
+    var shareText: String {
         "Jammy에서 '\(room.title)' 방에 함께해요! 초대 코드: \(room.inviteCode)"
     }
 
-    func capsuleText(for room: TripRoom) -> String? {
+    var capsuleText: String? {
         guard let capsule = room.capsule else { return nil }
         return "타임캡슐 \(JammyDate.monthDayWeekday(capsule.openAt)) \(JammyDate.time(capsule.openAt)) 공개"
     }
 
-    func metaText(for room: TripRoom) -> String {
-        "\(room.title) · \(JammyDate.range(room.startDate, room.endDate)) · 최대 \(room.maxMembers)명"
+    var metaText: String {
+        var text = "\(room.title) · \(JammyDate.range(room.startDate, room.endDate))"
+        if let limit = room.memberLimit { text += " · 최대 \(limit)명" }
+        return text
+    }
+
+    var memberCountText: String {
+        if let limit = room.memberLimit { return "\(room.memberCount) / \(limit)" }
+        return "\(room.memberCount)"
+    }
+
+    /// 아직 비어 있는 자리 수 (점선 슬롯)
+    var emptySlotCount: Int {
+        guard let limit = room.memberLimit else { return 0 }
+        return max(0, limit - room.memberCount)
     }
 }

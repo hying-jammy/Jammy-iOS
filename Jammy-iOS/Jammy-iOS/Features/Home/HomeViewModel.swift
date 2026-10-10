@@ -5,7 +5,7 @@ import Observation
 @Observable
 final class HomeViewModel {
     struct FeaturedRow: Identifiable {
-        let id: UUID
+        let id: Int
         let title: String
         let meta: String
         let statusTitle: String
@@ -16,7 +16,7 @@ final class HomeViewModel {
     }
 
     struct Row: Identifiable {
-        let id: UUID
+        let id: Int
         let title: String
         let meta: String
         let statusTitle: String
@@ -110,7 +110,7 @@ final class HomeViewModel {
     }
 
     private func meta(for room: TripRoom) -> String {
-        "\(JammyDate.range(room.startDate, room.endDate)) · \(room.members.count)명"
+        "\(JammyDate.range(room.startDate, room.endDate)) · \(room.memberCount)명"
     }
 
     private func isOngoing(_ room: TripRoom, now: Date) -> Bool {

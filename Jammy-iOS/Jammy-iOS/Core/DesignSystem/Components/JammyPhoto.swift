@@ -41,15 +41,30 @@ struct PhotoPlaceholder: View {
     }
 }
 
-/// 사진 데이터가 있으면 사진을, 없으면 자리표시자를 보여준다. 크기와 모서리는 호출하는 쪽에서 정한다.
+/// 사진 데이터(또는 서버 URL)가 있으면 사진을, 없으면 자리표시자를 보여준다.
+/// 크기와 모서리는 호출하는 쪽에서 정한다.
 struct JammyPhoto: View {
     var data: Data?
+    var url: URL?
     var tone: PhotoPlaceholder.Tone = .sunny
 
     var body: some View {
         if let data, let image = UIImage(data: data) {
             Color.clear
                 .overlay { Image(uiImage: image).resizable().scaledToFill() }
+                .clipped()
+        } else if let url {
+            Color.clear
+                .overlay {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        default:
+                            PhotoPlaceholder(tone: tone)
+                        }
+                    }
+                }
                 .clipped()
         } else {
             PhotoPlaceholder(tone: tone)

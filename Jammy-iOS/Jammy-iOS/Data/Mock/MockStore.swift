@@ -2,22 +2,39 @@ import Foundation
 
 /// 서버 대신 메모리에 데이터를 들고 있는 Mock 저장소.
 /// "방 만들기 → 홈 목록에 나타남" 같은 흐름이 앱 안에서 이어지도록 상태를 유지한다.
-/// 비즈니스 규칙(비밀 일기는 공개 전 작성자만 조회 등)도 서버처럼 여기서 강제한다.
+/// 실제 서버 명세(Notion API 명세서)와 같은 규칙을 따른다:
+/// - 공개 일기는 방 참여자에게 즉시 보이고, 타임캡슐 일기는 공개 시각 이후에만 조회된다.
+/// - 방 상세/목록에는 최대 인원이 없고, 초대 코드 확인·방 생성 응답에만 있다.
 @MainActor
 final class MockStore {
+    private struct Account {
+        var user: User
+        var email: String
+        var password: String
+    }
+
+    private struct StoredEntry {
+        var roomID: Int
+        var entry: DiaryEntry
+    }
+
     private let dateProvider: DateProvider
-    private var users: [User] = []
+    private let session: SessionStore
+    private var accounts: [Account] = []
     private var rooms: [TripRoom] = []
-    private var entries: [DiaryEntry] = []
-    private(set) var currentUser: User?
+    private var entries: [StoredEntry] = []
+    private var nextID = 1000
 
-    private let seedUser = User(id: UUID(), nickname: "나연", email: "nayeon@jammy.com")
-    private let minji = User(id: UUID(), nickname: "민지", email: "minji@jammy.com")
-    private let seojun = User(id: UUID(), nickname: "서준", email: "seojun@jammy.com")
+    private let seedUser = User(id: 1, nickname: "나연")
 
-    init(dateProvider: DateProvider = SystemDateProvider()) {
+    init(dateProvider: DateProvider = SystemDateProvider(), session: SessionStore? = nil) {
         self.dateProvider = dateProvider
-        users = [seedUser, minji, seojun]
+        self.session = session ?? InMemorySessionStore()
+        accounts = [
+            Account(user: seedUser, email: "nayeon@jammy.com", password: "jammy1234"),
+            Account(user: User(id: 2, nickname: "민지"), email: "minji@jammy.com", password: "jammy1234"),
+            Account(user: User(id: 3, nickname: "서준"), email: "seojun@jammy.com", password: "jammy1234")
+        ]
         seed()
     }
 
@@ -26,141 +43,161 @@ final class MockStore {
     // MARK: - Auth
 
     func login(email: String, password: String) throws -> User {
+        let normalized = email.lowercased()
         // 데모용 실패 케이스
-        if email.lowercased() == "fail@jammy.com" { throw AppError.invalidCredentials }
-        currentUser = seedUser
+        if normalized == "fail@jammy.com" { throw AppError.invalidCredentials }
+        if let account = accounts.first(where: { $0.email == normalized }) {
+            guard account.password == password else { throw AppError.invalidCredentials }
+            session.user = account.user
+            return account.user
+        }
+        // 가입하지 않은 이메일은 데모 계정으로 로그인한다.
+        session.user = seedUser
         return seedUser
     }
 
-    func signUp(nickname: String, email: String, password: String) throws -> User {
+    func signUp(nickname: String, email: String, password: String) throws {
+        let normalized = email.lowercased()
         // 데모용 실패 케이스
-        if email.lowercased() == "taken@jammy.com" { throw AppError.emailAlreadyUsed }
-        let user = User(id: UUID(), nickname: nickname, email: email)
-        users.append(user)
-        currentUser = user
-        return user
+        if normalized == "taken@jammy.com" || accounts.contains(where: { $0.email == normalized }) {
+            throw AppError.emailAlreadyUsed
+        }
+        accounts.append(Account(user: User(id: makeID(), nickname: nickname), email: normalized, password: password))
     }
 
-    func logout() { currentUser = nil }
+    func currentUser() -> User? { session.user }
+
+    func logout() { session.user = nil }
 
     // MARK: - Room
 
     func myRooms() throws -> [TripRoom] {
         let me = try requireMe()
         return rooms
-            .filter { $0.member(id: me.id) != nil }
+            .filter { room in room.members.contains { $0.nickname == me.nickname } }
             .sorted { $0.startDate > $1.startDate }
+            // 목록 API 는 참여자 목록과 최대 인원을 주지 않는다.
+            .map { room in
+                var item = room
+                item.members = []
+                item.memberLimit = nil
+                return item
+            }
     }
 
-    func room(id: UUID) throws -> TripRoom {
-        guard let room = rooms.first(where: { $0.id == id }) else { throw AppError.notFound }
+    func room(id: Int) throws -> TripRoom {
+        guard var room = rooms.first(where: { $0.id == id }) else { throw AppError.notFound }
+        room.memberLimit = nil
         return room
     }
 
     func lookupRoom(inviteCode: String) throws -> TripRoom {
         let code = Self.normalize(inviteCode)
-        guard let room = rooms.first(where: { $0.inviteCode == code }) else { throw AppError.invalidInviteCode }
+        guard var room = rooms.first(where: { $0.inviteCode == code }) else { throw AppError.invalidInviteCode }
+        room.capsule = nil
         return room
     }
 
     func createRoom(_ draft: NewRoomDraft) throws -> TripRoom {
         let me = try requireMe()
         let room = TripRoom(
-            id: UUID(),
+            id: makeID(),
             title: draft.title,
             startDate: draft.startDate,
             endDate: draft.endDate,
             inviteCode: makeInviteCode(),
-            ownerID: me.id,
-            members: [Member(id: me.id, nickname: me.nickname, isOwner: true)],
-            maxMembers: draft.maxMembers,
-            capsule: TimeCapsule(id: UUID(), title: "\(draft.title) 마지막 밤", openAt: draft.capsuleOpenAt)
+            members: [Member(nickname: me.nickname)],
+            memberCount: 1,
+            memberLimit: draft.memberLimit,
+            capsule: TimeCapsule(title: TimeCapsule.defaultTitle(forRoom: draft.title), openAt: draft.capsuleOpenAt)
         )
         rooms.append(room)
         return room
     }
 
-    func joinRoom(inviteCode: String) throws -> TripRoom {
+    func joinRoom(inviteCode: String) throws -> Int {
         let me = try requireMe()
         let code = Self.normalize(inviteCode)
         guard let index = rooms.firstIndex(where: { $0.inviteCode == code }) else { throw AppError.invalidInviteCode }
-        if rooms[index].member(id: me.id) != nil { throw AppError.alreadyMember }
-        if rooms[index].isFull { throw AppError.roomFull }
-        rooms[index].members.append(Member(id: me.id, nickname: me.nickname))
-        return rooms[index]
+        if rooms[index].members.contains(where: { $0.nickname == me.nickname }) { throw AppError.alreadyMember }
+        if let limit = rooms[index].memberLimit, rooms[index].members.count >= limit { throw AppError.roomFull }
+        rooms[index].members.append(Member(nickname: me.nickname))
+        rooms[index].memberCount = rooms[index].members.count
+        return rooms[index].id
     }
 
     // MARK: - Diary
 
-    func feed(roomID: UUID) throws -> [DiaryEntry] {
+    func feed(roomID: Int) throws -> [DiaryEntry] {
         try requireMember(of: roomID)
+        // 실제 서버처럼 타임캡슐 일기도 함께 내려준다. (내용 가림은 화면에서 한다)
         return entries
-            .filter { $0.roomID == roomID && $0.visibility == .friends }
+            .filter { $0.roomID == roomID }
+            .map(\.entry)
             .sorted { $0.createdAt > $1.createdAt }
     }
 
-    func timeline(roomID: UUID) throws -> [DiaryEntry] {
-        let me = try requireMember(of: roomID)
-        let opened = isCapsuleOpened(roomID: roomID)
+    func capsuleDiaries(roomID: Int) throws -> [DiaryEntry] {
+        try requireMember(of: roomID)
+        guard isCapsuleOpened(roomID: roomID) else { throw AppError.capsuleNotOpened }
         return entries
-            .filter { entry in
-                guard entry.roomID == roomID else { return false }
-                switch entry.visibility {
-                case .friends: return true
-                case .capsule: return opened || entry.authorID == me.id
-                }
-            }
+            .filter { $0.roomID == roomID && $0.entry.visibility == .capsule }
+            .map(\.entry)
             .sorted { $0.createdAt < $1.createdAt }
     }
 
-    func addEntry(_ draft: NewDiaryDraft) throws -> DiaryEntry {
+    func addEntry(_ draft: NewDiaryDraft) throws -> Int {
         let me = try requireMember(of: draft.roomID)
         if draft.visibility == .capsule, isCapsuleOpened(roomID: draft.roomID) {
             throw AppError.capsuleAlreadyOpened
         }
         let entry = DiaryEntry(
-            id: UUID(), roomID: draft.roomID, authorID: me.id,
-            text: draft.text, photoData: draft.photoData,
+            id: makeID(), authorNickname: me.nickname, text: draft.text,
+            photoURL: nil, photoData: draft.photoData,
             visibility: draft.visibility, createdAt: now
         )
-        entries.append(entry)
-        return entry
+        entries.append(StoredEntry(roomID: draft.roomID, entry: entry))
+        return entry.id
     }
 
     // MARK: - Capsule
 
-    func capsuleDetail(roomID: UUID) throws -> CapsuleDetail {
+    func capsuleInfo(roomID: Int) throws -> CapsuleInfo {
         try requireMember(of: roomID)
-        let room = try room(id: roomID)
-        guard let capsule = room.capsule else { throw AppError.notFound }
-        let secrets = entries.filter { $0.roomID == roomID && $0.visibility == .capsule }
-        let opened = capsule.status(at: now) == .opened
-        return CapsuleDetail(
-            room: room,
-            capsule: capsule,
-            submittedMemberIDs: Set(secrets.map(\.authorID)),
-            entries: opened ? secrets.sorted { $0.createdAt < $1.createdAt } : []
+        guard let room = rooms.first(where: { $0.id == roomID }), let capsule = room.capsule else { throw AppError.notFound }
+        let submitted = Set(entries.filter { $0.roomID == roomID && $0.entry.visibility == .capsule }.map(\.entry.authorNickname))
+        return CapsuleInfo(
+            roomID: roomID,
+            title: capsule.title,
+            openAt: capsule.openAt,
+            isOpened: capsule.status(at: now) == .opened,
+            members: room.members.map { MemberProgress(nickname: $0.nickname, hasSubmitted: submitted.contains($0.nickname)) }
         )
     }
 
     // MARK: - Helpers
 
     @discardableResult
-    private func requireMember(of roomID: UUID) throws -> User {
+    private func requireMember(of roomID: Int) throws -> User {
         let me = try requireMe()
-        let room = try room(id: roomID)
-        guard room.member(id: me.id) != nil else { throw AppError.notFound }
+        guard let room = rooms.first(where: { $0.id == roomID }) else { throw AppError.notFound }
+        guard room.members.contains(where: { $0.nickname == me.nickname }) else { throw AppError.forbidden(nil) }
         return me
     }
 
     private func requireMe() throws -> User {
-        guard let currentUser else { throw AppError.invalidCredentials }
-        return currentUser
+        guard let user = session.user else { throw AppError.invalidCredentials }
+        return user
     }
 
-    private func isCapsuleOpened(roomID: UUID) -> Bool {
+    private func isCapsuleOpened(roomID: Int) -> Bool {
         guard let capsule = rooms.first(where: { $0.id == roomID })?.capsule else { return false }
         return capsule.status(at: now) == .opened
+    }
+
+    private func makeID() -> Int {
+        nextID += 1
+        return nextID
     }
 
     private func makeInviteCode() -> String {
@@ -181,48 +218,34 @@ final class MockStore {
     private func seed() {
         let day: TimeInterval = 86_400
         let hour: TimeInterval = 3_600
-        let me = seedUser
-        func member(_ user: User, owner: Bool = false) -> Member {
-            Member(id: user.id, nickname: user.nickname, isOwner: owner)
+        let me = "나연", minji = "민지", seojun = "서준"
+
+        func room(_ id: Int, _ title: String, start: TimeInterval, end: TimeInterval, code: String, members: [String], limit: Int, opensAfter: TimeInterval) -> TripRoom {
+            TripRoom(
+                id: id, title: title,
+                startDate: now.addingTimeInterval(start), endDate: now.addingTimeInterval(end),
+                inviteCode: code,
+                members: members.map { Member(nickname: $0) },
+                memberCount: members.count, memberLimit: limit,
+                capsule: TimeCapsule(title: TimeCapsule.defaultTitle(forRoom: title), openAt: now.addingTimeInterval(opensAfter))
+            )
         }
 
         // 부산 여행: 진행 중, 타임캡슐 잠금
-        let busan = TripRoom(
-            id: UUID(), title: "부산 여행",
-            startDate: now.addingTimeInterval(-1 * day), endDate: now.addingTimeInterval(2 * day),
-            inviteCode: "JAM-4F7K", ownerID: minji.id,
-            members: [member(minji, owner: true), member(seojun), member(me)], maxMembers: 3,
-            capsule: TimeCapsule(id: UUID(), title: "부산 여행 마지막 밤", openAt: now.addingTimeInterval(2 * day + 4 * hour))
-        )
+        let busan = room(1, "부산 여행", start: -1 * day, end: 2 * day, code: "JAM-4F7K", members: [minji, seojun, me], limit: 3, opensAfter: 2 * day + 4 * hour)
         // 제주 가을 여행: 끝났고 타임캡슐 열림
-        let jeju = TripRoom(
-            id: UUID(), title: "제주 가을 여행",
-            startDate: now.addingTimeInterval(-40 * day), endDate: now.addingTimeInterval(-37 * day),
-            inviteCode: "JAM-9X2P", ownerID: me.id,
-            members: [member(me, owner: true), member(minji), member(seojun)], maxMembers: 4,
-            capsule: TimeCapsule(id: UUID(), title: "제주 여행 마지막 밤", openAt: now.addingTimeInterval(-36 * day))
-        )
+        let jeju = room(2, "제주 가을 여행", start: -40 * day, end: -37 * day, code: "JAM-9X2P", members: [me, minji, seojun], limit: 4, opensAfter: -36 * day)
         // 강릉 당일치기
-        let gangneung = TripRoom(
-            id: UUID(), title: "강릉 당일치기",
-            startDate: now.addingTimeInterval(-70 * day), endDate: now.addingTimeInterval(-70 * day),
-            inviteCode: "JAM-3C5D", ownerID: me.id,
-            members: [member(me, owner: true), member(minji)], maxMembers: 2,
-            capsule: TimeCapsule(id: UUID(), title: "강릉 당일치기 밤", openAt: now.addingTimeInterval(-69 * day))
-        )
+        let gangneung = room(3, "강릉 당일치기", start: -70 * day, end: -70 * day, code: "JAM-3C5D", members: [me, minji], limit: 2, opensAfter: -69 * day)
         // 속초 여행: 아직 참여하지 않은 방 (초대 코드 입력 데모용)
-        let sokcho = TripRoom(
-            id: UUID(), title: "속초 여행",
-            startDate: now.addingTimeInterval(10 * day), endDate: now.addingTimeInterval(12 * day),
-            inviteCode: "JAM-8M2Q", ownerID: minji.id,
-            members: [member(minji, owner: true), member(seojun)], maxMembers: 3,
-            capsule: TimeCapsule(id: UUID(), title: "속초 여행 마지막 밤", openAt: now.addingTimeInterval(12 * day + 8 * hour))
-        )
+        let sokcho = room(4, "속초 여행", start: 10 * day, end: 12 * day, code: "JAM-8M2Q", members: [minji, seojun], limit: 3, opensAfter: 12 * day + 8 * hour)
         rooms = [busan, jeju, gangneung, sokcho]
 
-        func entry(_ room: TripRoom, _ author: User, _ text: String, _ visibility: DiaryVisibility, ago: TimeInterval) -> DiaryEntry {
-            DiaryEntry(id: UUID(), roomID: room.id, authorID: author.id, text: text, photoData: [],
-                       visibility: visibility, createdAt: now.addingTimeInterval(-ago))
+        func entry(_ room: TripRoom, _ author: String, _ text: String, _ visibility: DiaryVisibility, ago: TimeInterval) -> StoredEntry {
+            StoredEntry(roomID: room.id, entry: DiaryEntry(
+                id: makeID(), authorNickname: author, text: text, photoURL: nil, photoData: nil,
+                visibility: visibility, createdAt: now.addingTimeInterval(-ago)
+            ))
         }
         entries = [
             entry(busan, minji, "해운대에 도착했다! 날씨가 정말 좋다.", .friends, ago: 5 * 60),

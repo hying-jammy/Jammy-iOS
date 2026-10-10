@@ -108,6 +108,9 @@ struct FeedCard: View {
     let author: Member?
     let timeText: String
     let text: String
+    /// 비밀 일기(타임캡슐)면 사진과 글 대신 가림 표시를 보여준다.
+    var isSecret = false
+    var photoURL: URL?
     var photoData: Data?
     var tone: PhotoPlaceholder.Tone = .sunny
 
@@ -123,15 +126,37 @@ struct FeedCard: View {
                         .font(.pretendard(.medium, size: 12, relativeTo: .caption))
                         .foregroundStyle(Color(.jammyTextTertiary))
                 }
+                if isSecret {
+                    Spacer(minLength: 0)
+                    JammyChip(title: "비밀 일기", kind: .yellow, systemImage: "lock.fill")
+                }
             }
-            JammyPhoto(data: photoData, tone: tone)
-                .frame(height: 150)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            Text(text)
-                .font(.pretendard(.regular, size: 15, relativeTo: .body))
-                .foregroundStyle(Color(.jammyTextPrimary))
-                .fixedSize(horizontal: false, vertical: true)
+            if isSecret {
+                HStack(spacing: 10) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(.jammyYellowText))
+                        .frame(width: 32, height: 32)
+                        .background(Color(.jammySurface), in: Circle())
+                    Text("타임캡슐에 담긴 비밀 일기예요.\n공개 시간이 되면 함께 볼 수 있어요.")
+                        .font(.pretendard(.medium, size: 13, relativeTo: .footnote))
+                        .foregroundStyle(Color(.jammyYellowText))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(14)
+                .background(Color(.jammySecondarySoft), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            } else {
+                if photoURL != nil || photoData != nil {
+                    JammyPhoto(data: photoData, url: photoURL, tone: tone)
+                        .frame(height: 150)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                Text(text)
+                    .font(.pretendard(.regular, size: 15, relativeTo: .body))
+                    .foregroundStyle(Color(.jammyTextPrimary))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -172,6 +197,8 @@ struct CapsuleCard: View {
 struct SecretEntryCard: View {
     let author: Member?
     let text: String
+    var photoURL: URL?
+    var photoData: Data?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -182,6 +209,12 @@ struct SecretEntryCard: View {
                     .foregroundStyle(Color(.jammyTextPrimary))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 JammyChip(title: "비밀 일기", kind: .yellow, systemImage: "lock.fill")
+            }
+            if photoURL != nil || photoData != nil {
+                JammyPhoto(data: photoData, url: photoURL)
+                    .frame(height: 120)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             Text(text)
                 .font(.pretendard(.regular, size: 15, relativeTo: .body))
@@ -200,9 +233,9 @@ struct SecretEntryCard: View {
             FeaturedTripCard(title: "부산 여행", meta: "10.12 – 10.14 · 3명", statusTitle: "여행 중",
                              capsuleTitle: "타임캡슐 잠금 중", capsuleSubtitle: "10.14 오후 8:00 공개", dDay: "D-2")
             TripRowCard(title: "제주 가을 여행", meta: "9.20 – 9.23 · 4명", statusTitle: "열림", statusKind: .green)
-            FeedCard(author: Member(id: UUID(), nickname: "민지"), timeText: "방금 전", text: "해운대에 도착했다! 날씨가 정말 좋다.")
+            FeedCard(author: Member(nickname: "민지"), timeText: "방금 전", text: "해운대에 도착했다! 날씨가 정말 좋다.")
             CapsuleCard(title: "부산 여행 마지막 밤", subtitle: "10.14 오후 8:00 공개 · D-2", isOpened: false)
-            SecretEntryCard(author: Member(id: UUID(), nickname: "서준"), text: "돼지국밥 먹고 나서 친구들 표정이 아직도 생각난다.")
+            SecretEntryCard(author: Member(nickname: "서준"), text: "돼지국밥 먹고 나서 친구들 표정이 아직도 생각난다.")
         }
         .padding(20)
     }

@@ -52,8 +52,8 @@ struct CreateRoomView: View {
         .safeAreaInset(edge: .bottom) {
             JammyButton(title: viewModel.isSubmitting ? "만드는 중…" : "방 만들기") {
                 Task {
-                    if let roomID = await viewModel.create() {
-                        router.replaceTop(with: .inviteCode(roomID: roomID))
+                    if let room = await viewModel.create() {
+                        router.replaceTop(with: .inviteCode(room: room))
                     }
                 }
             }

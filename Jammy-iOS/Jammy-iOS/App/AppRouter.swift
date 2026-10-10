@@ -9,9 +9,10 @@ enum AuthRoute: Hashable {
 enum MainRoute: Hashable {
     case createRoom
     case joinRoom
-    case inviteCode(roomID: UUID)
-    case room(roomID: UUID)
-    case capsule(roomID: UUID)
+    /// 방 생성 응답에만 최대 인원이 있어서 방 정보를 그대로 넘긴다.
+    case inviteCode(room: TripRoom)
+    case room(roomID: Int)
+    case capsule(roomID: Int)
 }
 
 /// 앱 전체 라우팅. 인증 상태에 따라 루트(온보딩 ↔ 메인)를 전환하고,
@@ -21,9 +22,13 @@ enum MainRoute: Hashable {
 final class AppRouter {
     enum Root { case onboarding, main }
 
-    var root: Root = .onboarding
+    var root: Root
     var authPath: [AuthRoute] = []
     var mainPath: [MainRoute] = []
+
+    init(root: Root = .onboarding) {
+        self.root = root
+    }
 
     func didSignIn() {
         authPath = []
@@ -48,7 +53,7 @@ final class AppRouter {
     }
 
     /// 스택을 비우고 해당 방으로 들어간다.
-    func enterRoom(_ roomID: UUID) {
+    func enterRoom(_ roomID: Int) {
         mainPath = [.room(roomID: roomID)]
     }
 }

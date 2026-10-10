@@ -66,23 +66,22 @@ final class CreateRoomViewModel {
     var canIncrease: Bool { maxMembers < Self.memberRange.upperBound }
     var canDecrease: Bool { maxMembers > Self.memberRange.lowerBound }
 
-    /// 만들어진 방의 id. 실패하면 nil.
-    func create() async -> UUID? {
+    /// 만들어진 방. 실패하면 nil.
+    func create() async -> TripRoom? {
         guard canSubmit else { return nil }
         isSubmitting = true
         errorMessage = nil
         defer { isSubmitting = false }
         do {
-            let room = try await roomRepository.createRoom(
+            return try await roomRepository.createRoom(
                 NewRoomDraft(
                     title: trimmedTitle,
                     startDate: startDate,
                     endDate: endDate,
-                    maxMembers: maxMembers,
+                    memberLimit: maxMembers,
                     capsuleOpenAt: capsuleOpenAt
                 )
             )
-            return room.id
         } catch {
             errorMessage = AppError(error).errorDescription
             return nil

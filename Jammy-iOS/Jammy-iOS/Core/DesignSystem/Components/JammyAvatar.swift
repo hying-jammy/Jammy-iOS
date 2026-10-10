@@ -35,7 +35,9 @@ struct JammyAvatar: View {
     /// 참여자 id 로 색이 고정되도록 톤을 고른다.
     init(member: Member, size: Size = .small) {
         let tones = [Color(.jammyPrimarySoft), Color(.jammySecondarySoft), Color(.jammyGreenSoft)]
-        self.init(initial: member.initial, tone: tones[Int(member.id.uuid.0) % tones.count], size: size)
+        // 닉네임으로 색이 고정되도록 한다. (String.hashValue 는 실행마다 달라서 쓰지 않는다)
+        let seed = member.nickname.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
+        self.init(initial: member.initial, tone: tones[seed % tones.count], size: size)
     }
 
     var body: some View {

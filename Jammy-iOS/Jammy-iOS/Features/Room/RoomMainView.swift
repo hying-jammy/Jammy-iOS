@@ -46,7 +46,7 @@ struct RoomMainView: View {
         JammyTopBar(onBack: { dismiss() }) {
             if let room = viewModel.room {
                 Button {
-                    router.push(.inviteCode(roomID: room.id))
+                    router.push(.inviteCode(room: room))
                 } label: {
                     JammyChip(title: "초대 코드 \(room.inviteCode)", kind: .yellow, systemImage: "key")
                 }
@@ -114,7 +114,7 @@ struct RoomMainView: View {
                 emptyView(title: "아직 올라온 순간이 없어요", message: "첫 번째 순간을 담아볼까요?")
             } else {
                 ForEach(viewModel.feedItems) { item in
-                    FeedCard(author: item.author, timeText: item.timeText, text: item.text, photoData: item.photoData)
+                    FeedCard(author: item.author, timeText: item.timeText, text: item.text, isSecret: item.isSecret, photoURL: item.photoURL, photoData: item.photoData)
                 }
             }
         }
@@ -176,14 +176,14 @@ private struct RecordRow: View {
                             .foregroundStyle(Color(.jammyTextPrimary))
                         JammyChip(title: item.isCapsule ? "타임캡슐" : "공개", kind: item.isCapsule ? .yellow : .primary)
                     }
-                    Text(item.text)
+                    Text(item.isHidden ? "비밀 일기예요. 타임캡슐이 열리면 볼 수 있어요." : item.text)
                         .font(.pretendard(.regular, size: 14, relativeTo: .subheadline))
-                        .foregroundStyle(Color(.jammyTextSecondary))
+                        .foregroundStyle(Color(item.isHidden ? .jammyTextTertiary : .jammyTextSecondary))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if let data = item.photoData {
-                    JammyPhoto(data: data)
+                if item.photoURL != nil || item.photoData != nil {
+                    JammyPhoto(data: item.photoData, url: item.photoURL)
                         .frame(width: 60, height: 60)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
@@ -201,7 +201,7 @@ private struct RecordRow: View {
 #Preview {
     let container = AppContainer.mock()
     NavigationStack {
-        RoomMainView(viewModel: container.makeRoomMainViewModel(roomID: UUID()))
+        RoomMainView(viewModel: container.makeRoomMainViewModel(roomID: 1))
     }
     .environment(container)
     .environment(AppRouter())

@@ -5,7 +5,7 @@ import PhotosUI
 struct WriteDiaryView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel: WriteDiaryViewModel
-    @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var pickerItem: PhotosPickerItem?
     @FocusState private var isTextFocused: Bool
     let onSaved: () -> Void
 
@@ -45,8 +45,8 @@ struct WriteDiaryView: View {
             .background(Color(.jammyBackground))
         }
         .task { await viewModel.load() }
-        .onChange(of: pickerItems) {
-            Task { await viewModel.loadPhotos(from: pickerItems) }
+        .onChange(of: pickerItem) {
+            Task { await viewModel.loadPhoto(from: pickerItem) }
         }
         .background(Color(.jammyBackground).ignoresSafeArea())
     }
@@ -54,55 +54,45 @@ struct WriteDiaryView: View {
     // MARK: - Sections
 
     private var photoSection: some View {
-        let maxPhotos = WriteDiaryViewModel.maxPhotos
-        let hasPhotos = !viewModel.photoData.isEmpty
-        return VStack(alignment: .leading, spacing: 12) {
-            PhotosPicker(selection: $pickerItems, maxSelectionCount: maxPhotos, matching: .images) {
-                VStack(spacing: 8) {
-                    Image(systemName: "photo")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Color(.jammyYellowText))
-                        .frame(width: 48, height: 48)
-                        .background(Color(.jammySecondarySoft), in: Circle())
-                    Text(hasPhotos ? "사진 다시 고르기" : "사진 추가하기")
-                        .font(.pretendard(.semibold, size: 15, relativeTo: .body))
-                        .foregroundStyle(Color(.jammyTextPrimary))
-                    Text("여행의 한 장면을 올려보세요 (최대 \(maxPhotos)장)")
-                        .font(.pretendard(.regular, size: 12, relativeTo: .caption))
-                        .foregroundStyle(Color(.jammyTextTertiary))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: hasPhotos ? 130 : 170)
-                .background(Color(.jammySurfaceWarm), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color(.jammyPrimary), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+        let photoData = viewModel.photoData
+        return VStack(alignment: .leading, spacing: 10) {
+            PhotosPicker(selection: $pickerItem, matching: .images) {
+                if let data = photoData {
+                    JammyPhoto(data: data)
+                        .frame(height: 200)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                } else {
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Color(.jammyYellowText))
+                            .frame(width: 48, height: 48)
+                            .background(Color(.jammySecondarySoft), in: Circle())
+                        Text("사진 추가하기")
+                            .font(.pretendard(.semibold, size: 15, relativeTo: .body))
+                            .foregroundStyle(Color(.jammyTextPrimary))
+                        Text("여행의 한 장면을 올려보세요 (사진은 1장까지)")
+                            .font(.pretendard(.regular, size: 12, relativeTo: .caption))
+                            .foregroundStyle(Color(.jammyTextTertiary))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 170)
+                    .background(Color(.jammySurfaceWarm), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(Color(.jammyPrimary), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                    }
                 }
             }
 
-            if !viewModel.photoData.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(Array(viewModel.photoData.enumerated()), id: \.offset) { index, data in
-                            JammyPhoto(data: data)
-                                .frame(width: 84, height: 84)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .overlay(alignment: .topTrailing) {
-                                    Button {
-                                        viewModel.removePhoto(at: index)
-                                    } label: {
-                                        Image(systemName: "xmark")
-                                            .font(.system(size: 10, weight: .bold))
-                                            .foregroundStyle(.white)
-                                            .frame(width: 22, height: 22)
-                                            .background(Color(.jammyTextPrimary).opacity(0.7), in: Circle())
-                                            .padding(4)
-                                    }
-                                    .accessibilityLabel("사진 삭제")
-                                }
-                        }
-                    }
+            if photoData != nil {
+                Button("사진 삭제") {
+                    viewModel.removePhoto()
+                    pickerItem = nil
                 }
+                .font(.pretendard(.semibold, size: 13, relativeTo: .footnote))
+                .foregroundStyle(Color(.jammyTextSecondary))
             }
         }
     }
@@ -190,5 +180,5 @@ struct WriteDiaryView: View {
 }
 
 #Preview {
-    WriteDiaryView(viewModel: AppContainer.mock().makeWriteDiaryViewModel(roomID: UUID()))
+    WriteDiaryView(viewModel: AppContainer.mock().makeWriteDiaryViewModel(roomID: 1))
 }

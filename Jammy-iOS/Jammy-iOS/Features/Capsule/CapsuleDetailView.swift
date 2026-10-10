@@ -30,11 +30,11 @@ struct CapsuleDetailView: View {
                         .frame(width: 160)
                     Spacer()
                 }
-            case .loaded(let detail):
+            case .loaded:
                 if viewModel.isOpened {
-                    openedView(detail)
+                    openedView
                 } else {
-                    lockedView(detail)
+                    lockedView
                 }
             }
         }
@@ -51,7 +51,7 @@ struct CapsuleDetailView: View {
 
     // MARK: - 공개 전
 
-    private func lockedView(_ detail: CapsuleDetail) -> some View {
+    private var lockedView: some View {
         ScrollView {
             VStack(spacing: 18) {
                 JammyTopBar(title: "타임캡슐", onBack: { dismiss() })
@@ -65,7 +65,7 @@ struct CapsuleDetailView: View {
                             .background(Color(.jammySurface), in: Circle())
                             .overlay(Circle().strokeBorder(Color(.jammyBorder), lineWidth: 1))
                     }
-                    Text(detail.capsule.title)
+                    Text(viewModel.title)
                         .font(.pretendard(.extrabold, size: 24, relativeTo: .title2))
                         .foregroundStyle(Color(.jammyTextPrimary))
                         .multilineTextAlignment(.center)
@@ -123,8 +123,8 @@ struct CapsuleDetailView: View {
         VStack(spacing: 0) {
             ForEach(viewModel.memberRows) { row in
                 HStack(spacing: 10) {
-                    JammyAvatar(member: row.member)
-                    Text(row.member.nickname)
+                    JammyAvatar(member: Member(nickname: row.nickname))
+                    Text(row.nickname)
                         .font(.pretendard(.semibold, size: 15, relativeTo: .headline))
                         .foregroundStyle(Color(.jammyTextPrimary))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -144,7 +144,7 @@ struct CapsuleDetailView: View {
 
     // MARK: - 공개 후
 
-    private func openedView(_ detail: CapsuleDetail) -> some View {
+    private var openedView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 JammyTopBar(title: "타임캡슐", onBack: { dismiss() }) {
@@ -180,7 +180,7 @@ struct CapsuleDetailView: View {
                         .padding(.vertical, 24)
                 } else {
                     ForEach(viewModel.entryItems) { item in
-                        SecretEntryCard(author: item.author, text: item.text)
+                        SecretEntryCard(author: item.author, text: item.text, photoURL: item.photoURL, photoData: item.photoData)
                     }
                 }
             }
@@ -193,6 +193,6 @@ struct CapsuleDetailView: View {
 #Preview {
     let container = AppContainer.mock()
     NavigationStack {
-        CapsuleDetailView(viewModel: container.makeCapsuleDetailViewModel(roomID: UUID()))
+        CapsuleDetailView(viewModel: container.makeCapsuleDetailViewModel(roomID: 1))
     }
 }

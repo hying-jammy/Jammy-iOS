@@ -5,18 +5,24 @@ import Observation
 @Observable
 final class RoomMainViewModel {
     struct FeedItem: Identifiable {
-        let id: UUID
-        let author: Member?
+        let id: Int
+        let author: Member
         let timeText: String
+        /// 비밀 일기(타임캡슐)면 내용을 담지 않고 가림 표시만 한다.
+        let isSecret: Bool
         let text: String
+        let photoURL: URL?
         let photoData: Data?
     }
 
     struct TimelineItem: Identifiable {
-        let id: UUID
+        let id: Int
         let authorName: String
         let isCapsule: Bool
+        /// 아직 공개되지 않은 비밀 일기. 내용은 비어 있다.
+        let isHidden: Bool
         let text: String
+        let photoURL: URL?
         let photoData: Data?
     }
 
@@ -39,7 +45,7 @@ final class RoomMainViewModel {
         case failed(AppError)
     }
 
-    let roomID: UUID
+    let roomID: Int
     var tab: RoomTab = .feed
     private(set) var state: State = .loading
     private(set) var room: TripRoom?
@@ -51,7 +57,7 @@ final class RoomMainViewModel {
     private let diaryRepository: DiaryRepository
     private let dateProvider: DateProvider
 
-    init(roomID: UUID, roomRepository: RoomRepository, diaryRepository: DiaryRepository, dateProvider: DateProvider) {
+    init(roomID: Int, roomRepository: RoomRepository, diaryRepository: DiaryRepository, dateProvider: DateProvider) {
         self.roomID = roomID
         self.roomRepository = roomRepository
         self.diaryRepository = diaryRepository
@@ -71,11 +77,21 @@ final class RoomMainViewModel {
         do {
             async let roomResult = roomRepository.fetchRoom(id: roomID)
             async let feedResult = diaryRepository.fetchFeed(roomID: roomID)
-            async let timelineResult = diaryRepository.fetchTimeline(roomID: roomID)
-            let (room, feed, timeline) = try await (roomResult, feedResult, timelineResult)
+            let (room, feed) = try await (roomResult, feedResult)
+
+            // 기록 탭: 공개 일기 + (타임캡슐이 열렸다면) 타임캡슐 일기.
+            // 서버는 공개 전 타임캡슐 일기를 내려주지 않는다.
+            var capsuleDiaries: [DiaryEntry] = []
+            if room.capsule?.status(at: dateProvider.now) == .opened {
+                do {
+                    capsuleDiaries = try await diaryRepository.fetchCapsuleDiaries(roomID: roomID)
+                } catch AppError.capsuleNotOpened {
+                    capsuleDiaries = []
+                }
+            }
 
             self.room = room
-            apply(room: room, feed: feed, timeline: timeline)
+            apply(room: room, feed: feed, capsuleDiaries: capsuleDiaries)
             state = .loaded
         } catch {
             state = .failed(AppError(error))
@@ -84,20 +100,30 @@ final class RoomMainViewModel {
 
     // MARK: - 화면용 데이터 만들기
 
-    private func apply(room: TripRoom, feed: [DiaryEntry], timeline: [DiaryEntry]) {
+    private func apply(room: TripRoom, feed: [DiaryEntry], capsuleDiaries: [DiaryEntry]) {
         let now = dateProvider.now
         let calendar = Calendar.current
 
+        // 공개 피드에는 서버가 비밀 일기도 내려주므로, 비밀 일기는 내용(글/사진)을 아예 버리고 가림 표시만 남긴다.
         feedItems = feed.map { entry in
-            FeedItem(
+            let isSecret = entry.visibility == .capsule
+            return FeedItem(
                 id: entry.id,
-                author: room.member(id: entry.authorID),
+                author: Member(nickname: entry.authorNickname),
                 timeText: JammyDate.relative(entry.createdAt, to: now),
-                text: entry.text,
-                photoData: entry.photoData.first
+                isSecret: isSecret,
+                text: isSecret ? "" : entry.text,
+                photoURL: isSecret ? nil : entry.photoURL,
+                photoData: isSecret ? nil : entry.photoData
             )
         }
 
+        // 기록 탭: 공개 일기 + 열린 타임캡슐 일기. 아직 공개되지 않은 비밀 일기는 내용을 가린 채 함께 보여준다.
+        let revealedIDs = Set(capsuleDiaries.map(\.id))
+        let hiddenSecrets = feed.filter { $0.visibility == .capsule && !revealedIDs.contains($0.id) }
+        let hiddenIDs = Set(hiddenSecrets.map(\.id))
+        let publicEntries = feed.filter { $0.visibility == .friends }
+        let timeline = (publicEntries + capsuleDiaries + hiddenSecrets).sorted { $0.createdAt < $1.createdAt }
         let grouped = Dictionary(grouping: timeline) { calendar.startOfDay(for: $0.createdAt) }
         timelineSections = grouped.keys.sorted().map { day in
             let entries = grouped[day] ?? []
@@ -106,12 +132,15 @@ final class RoomMainViewModel {
                 title: JammyDate.monthDayWeekday(day),
                 countText: "\(entries.count)개",
                 items: entries.map { entry in
-                    TimelineItem(
+                    let isHidden = hiddenIDs.contains(entry.id)
+                    return TimelineItem(
                         id: entry.id,
-                        authorName: room.member(id: entry.authorID)?.nickname ?? "알 수 없음",
+                        authorName: entry.authorNickname,
                         isCapsule: entry.visibility == .capsule,
-                        text: entry.text,
-                        photoData: entry.photoData.first
+                        isHidden: isHidden,
+                        text: isHidden ? "" : entry.text,
+                        photoURL: isHidden ? nil : entry.photoURL,
+                        photoData: isHidden ? nil : entry.photoData
                     )
                 }
             )

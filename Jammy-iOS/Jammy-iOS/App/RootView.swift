@@ -44,8 +44,8 @@ struct RootView: View {
             CreateRoomView(viewModel: container.makeCreateRoomViewModel())
         case .joinRoom:
             JoinRoomView(viewModel: container.makeJoinRoomViewModel())
-        case .inviteCode(let roomID):
-            InviteCodeView(viewModel: container.makeInviteCodeViewModel(roomID: roomID))
+        case .inviteCode(let room):
+            InviteCodeView(viewModel: container.makeInviteCodeViewModel(room: room))
         case .room(let roomID):
             RoomMainView(viewModel: container.makeRoomMainViewModel(roomID: roomID))
         case .capsule(let roomID):

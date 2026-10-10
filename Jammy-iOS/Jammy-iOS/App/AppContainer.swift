@@ -2,34 +2,45 @@ import Foundation
 import Observation
 
 /// 의존성 조립 지점. Mock ↔ Remote 전환은 여기서만 바뀐다.
-/// API 가 준비되면 `live()` 를 추가해 Remote*Repository 를 주입한다.
 @MainActor
 @Observable
 final class AppContainer {
+    let isMock: Bool
     let dateProvider: DateProvider
+    let sessionStore: SessionStore
     let authRepository: AuthRepository
     let roomRepository: RoomRepository
     let diaryRepository: DiaryRepository
     let capsuleRepository: CapsuleRepository
 
     init(
+        isMock: Bool,
         dateProvider: DateProvider,
+        sessionStore: SessionStore,
         authRepository: AuthRepository,
         roomRepository: RoomRepository,
         diaryRepository: DiaryRepository,
         capsuleRepository: CapsuleRepository
     ) {
+        self.isMock = isMock
         self.dateProvider = dateProvider
+        self.sessionStore = sessionStore
         self.authRepository = authRepository
         self.roomRepository = roomRepository
         self.diaryRepository = diaryRepository
         self.capsuleRepository = capsuleRepository
     }
 
+    /// 앱을 다시 켰을 때 이전 로그인 상태가 남아 있는지
+    var hasStoredSession: Bool { sessionStore.user != nil }
+
     static func mock(dateProvider: DateProvider = SystemDateProvider()) -> AppContainer {
-        let store = MockStore(dateProvider: dateProvider)
+        let sessionStore = InMemorySessionStore()
+        let store = MockStore(dateProvider: dateProvider, session: sessionStore)
         return AppContainer(
+            isMock: true,
             dateProvider: dateProvider,
+            sessionStore: sessionStore,
             authRepository: MockAuthRepository(store: store),
             roomRepository: MockRoomRepository(store: store),
             diaryRepository: MockDiaryRepository(store: store),
@@ -55,23 +66,23 @@ final class AppContainer {
         CreateRoomViewModel(roomRepository: roomRepository, dateProvider: dateProvider)
     }
 
-    func makeInviteCodeViewModel(roomID: UUID) -> InviteCodeViewModel {
-        InviteCodeViewModel(roomID: roomID, roomRepository: roomRepository)
+    func makeInviteCodeViewModel(room: TripRoom) -> InviteCodeViewModel {
+        InviteCodeViewModel(room: room)
     }
 
     func makeJoinRoomViewModel() -> JoinRoomViewModel {
         JoinRoomViewModel(roomRepository: roomRepository)
     }
 
-    func makeRoomMainViewModel(roomID: UUID) -> RoomMainViewModel {
+    func makeRoomMainViewModel(roomID: Int) -> RoomMainViewModel {
         RoomMainViewModel(roomID: roomID, roomRepository: roomRepository, diaryRepository: diaryRepository, dateProvider: dateProvider)
     }
 
-    func makeWriteDiaryViewModel(roomID: UUID) -> WriteDiaryViewModel {
+    func makeWriteDiaryViewModel(roomID: Int) -> WriteDiaryViewModel {
         WriteDiaryViewModel(roomID: roomID, roomRepository: roomRepository, diaryRepository: diaryRepository, dateProvider: dateProvider)
     }
 
-    func makeCapsuleDetailViewModel(roomID: UUID) -> CapsuleDetailViewModel {
-        CapsuleDetailViewModel(roomID: roomID, capsuleRepository: capsuleRepository, dateProvider: dateProvider)
+    func makeCapsuleDetailViewModel(roomID: Int) -> CapsuleDetailViewModel {
+        CapsuleDetailViewModel(roomID: roomID, capsuleRepository: capsuleRepository, diaryRepository: diaryRepository, dateProvider: dateProvider)
     }
 }

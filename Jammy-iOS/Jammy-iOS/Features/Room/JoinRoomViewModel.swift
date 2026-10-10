@@ -68,13 +68,13 @@ final class JoinRoomViewModel {
     }
 
     /// 참여한 방의 id. 실패하면 nil.
-    func join() async -> UUID? {
+    func join() async -> Int? {
         guard canJoin else { return nil }
         isJoining = true
         joinErrorMessage = nil
         defer { isJoining = false }
         do {
-            return try await roomRepository.joinRoom(inviteCode: normalizedCode).id
+            return try await roomRepository.joinRoom(inviteCode: normalizedCode)
         } catch {
             joinErrorMessage = AppError(error).errorDescription
             return nil
@@ -82,8 +82,14 @@ final class JoinRoomViewModel {
     }
 
     func previewMeta(for room: TripRoom) -> String {
-        let owner = room.member(id: room.ownerID)?.nickname ?? ""
-        return "\(JammyDate.range(room.startDate, room.endDate)) · 방장 \(owner)"
+        let names = room.members.map(\.nickname).joined(separator: ", ")
+        let range = JammyDate.range(room.startDate, room.endDate)
+        return names.isEmpty ? range : "\(range) · \(names)"
+    }
+
+    func memberCountText(for room: TripRoom) -> String {
+        if let limit = room.memberLimit { return "\(room.memberCount) / \(limit)명 참여 중" }
+        return "\(room.memberCount)명 참여 중"
     }
 
     private func formatCode() {
