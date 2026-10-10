@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 /// 의존성 조립 지점. Mock ↔ Remote 전환은 여기서만 바뀐다.
+/// `make()` 는 서버 주소(`APIConfig.baseURL`)가 설정되어 있으면 Remote 를, 비어 있으면 Mock 을 쓴다.
 @MainActor
 @Observable
 final class AppContainer {
@@ -33,6 +34,31 @@ final class AppContainer {
 
     /// 앱을 다시 켰을 때 이전 로그인 상태가 남아 있는지
     var hasStoredSession: Bool { sessionStore.user != nil }
+
+    static func make() -> AppContainer {
+        if let baseURL = APIConfig.baseURL {
+            return live(baseURL: baseURL)
+        }
+        return mock()
+    }
+
+    static func live(
+        baseURL: URL,
+        sessionStore: SessionStore? = nil,
+        dateProvider: DateProvider = SystemDateProvider()
+    ) -> AppContainer {
+        let sessionStore = sessionStore ?? UserDefaultsSessionStore()
+        let client = APIClient(baseURL: baseURL)
+        return AppContainer(
+            isMock: false,
+            dateProvider: dateProvider,
+            sessionStore: sessionStore,
+            authRepository: RemoteAuthRepository(client: client, session: sessionStore),
+            roomRepository: RemoteRoomRepository(client: client, session: sessionStore),
+            diaryRepository: RemoteDiaryRepository(client: client, session: sessionStore),
+            capsuleRepository: RemoteCapsuleRepository(client: client)
+        )
+    }
 
     static func mock(dateProvider: DateProvider = SystemDateProvider()) -> AppContainer {
         let sessionStore = InMemorySessionStore()
